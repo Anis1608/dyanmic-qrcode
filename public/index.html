@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dynamic QR Code</title>
     <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
     <div class="container">
@@ -32,7 +34,8 @@
                 <div class="qr-info">
                     <div><strong>QR ID:</strong> <span id="qr-id"></span></div>
                     <div><strong>Redirects to:</strong> <span id="qr-target"></span></div>
-                    <div style="font-size: 0.8rem; color: #666; margin-top: 5px;">Save this ID to update the link later!</div>
+                    <div style="font-size: 0.8rem; color: #666; margin-top: 5px;">Save this ID to update the link later!
+                    </div>
                 </div>
             </div>
         </div>
@@ -84,9 +87,9 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ url })
                 });
-                
+
                 const data = await res.json();
-                
+
                 if (data.qrCodeImage) {
                     document.getElementById('qr-img').src = data.qrCodeImage;
                     document.getElementById('qr-id').innerText = data.id;
@@ -141,4 +144,5 @@
         }
     </script>
 </body>
+
 </html>
