@@ -2,32 +2,33 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const QRCode = require('qrcode');
-const fs = require('fs');
-const path = require('path');
+const mongoose = require('mongoose');
+require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DB_FILE = path.join(__dirname, 'database.json');
 
+// Middleware
 app.use(cors());
 app.use(bodyParser.json());
 app.use(express.static('public'));
 
-// Load database
-let db = {};
-if (fs.existsSync(DB_FILE)) {
-    try {
-        db = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-    } catch (e) {
-        console.error("Error reading database:", e);
-        db = {};
-    }
-}
+// MongoDB Connection
+// Note: In a real app, you should handle connection errors more robustly
+console.log('Connecting to MongoDB...');
+mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/qr_app')
+    .then(() => console.log('MongoDB Connected'))
+    .catch(err => console.error('MongoDB Connection Error:', err));
 
-// Helper to save database
-const saveDb = () => {
-    fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
-};
+// Define Schema
+const LinkSchema = new mongoose.Schema({
+    shortId: { type: String, required: true, unique: true },
+    targetUrl: { type: String, required: true },
+    createdAt: { type: Date, default: Date.now },
+    clicks: { type: Number, default: 0 }
+});
+
+const Link = mongoose.model('Link', LinkSchema);
 
 // Generate a random ID
 const generateId = () => {
@@ -41,20 +42,26 @@ app.post('/api/generate', async (req, res) => {
         return res.status(400).json({ error: 'URL is required' });
     }
 
-    const id = generateId();
-    // In a real app, check for collisions
-    
-    db[id] = url;
-    saveDb();
+    let id = generateId();
+    // Ensure ID is unique (simple collision check)
+    let existing = await Link.findOne({ shortId: id });
+    while (existing) {
+        id = generateId();
+        existing = await Link.findOne({ shortId: id });
+    }
 
-    // The URL that will be encoded in the QR code
-    // Assuming localhost for now, but in production this should be the public domain
-    // We will try to detect the host header if possible, or use a default
-    // For local testing, we'll use the request protocol and host
-    const redirectUrl = `${req.protocol}://${req.get('host')}/r/${id}`;
+    const newLink = new Link({
+        shortId: id,
+        targetUrl: url
+    });
 
     try {
+        await newLink.save();
+
+        // The URL that will be encoded in the QR code
+        const redirectUrl = `${req.protocol}://${req.get('host')}/r/${id}`;
         const qrCodeImage = await QRCode.toDataURL(redirectUrl);
+        
         res.json({
             id,
             redirectUrl,
@@ -62,46 +69,70 @@ app.post('/api/generate', async (req, res) => {
             targetUrl: url
         });
     } catch (err) {
+        console.error(err);
         res.status(500).json({ error: 'Error generating QR code' });
     }
 });
 
 // 2. Redirect Endpoint
-app.get('/r/:id', (req, res) => {
+app.get('/r/:id', async (req, res) => {
     const { id } = req.params;
-    const targetUrl = db[id];
 
-    if (targetUrl) {
-        // Simple analytics could go here (count scans)
-        res.redirect(targetUrl);
-    } else {
-        res.status(404).send('Link not found or expired.');
+    try {
+        const link = await Link.findOne({ shortId: id });
+
+        if (link) {
+            // Update click count (non-blocking)
+            link.clicks++;
+            link.save();
+            
+            res.redirect(link.targetUrl);
+        } else {
+            res.status(404).send('Link not found or expired.');
+        }
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server Error');
     }
 });
 
 // 3. Update the Link (The "Dynamic" part)
-app.post('/api/update', (req, res) => {
+app.post('/api/update', async (req, res) => {
     const { id, newUrl } = req.body;
     if (!id || !newUrl) {
         return res.status(400).json({ error: 'ID and New URL are required' });
     }
 
-    if (db[id]) {
-        db[id] = newUrl;
-        saveDb();
-        res.json({ success: true, id, newUrl });
-    } else {
-        res.status(404).json({ error: 'QR Code ID not found' });
+    try {
+        const link = await Link.findOneAndUpdate(
+            { shortId: id },
+            { targetUrl: newUrl },
+            { new: true }
+        );
+
+        if (link) {
+            res.json({ success: true, id, newUrl: link.targetUrl });
+        } else {
+            res.status(404).json({ error: 'QR Code ID not found' });
+        }
+    } catch(err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server Error' });
     }
 });
 
 // 4. Get current info (optional, for UI)
-app.get('/api/info/:id', (req, res) => {
+app.get('/api/info/:id', async (req, res) => {
     const { id } = req.params;
-    if (db[id]) {
-        res.json({ id, targetUrl: db[id] });
-    } else {
-        res.status(404).json({ error: 'Not found' });
+    try {
+        const link = await Link.findOne({ shortId: id });
+        if (link) {
+            res.json({ id, targetUrl: link.targetUrl, clicks: link.clicks });
+        } else {
+            res.status(404).json({ error: 'Not found' });
+        }
+    } catch(err) {
+        res.status(500).json({ error: 'Server Error' });
     }
 });
 
