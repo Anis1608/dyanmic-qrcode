@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic QR Code</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="container">
+        <h1>Dynamic QR</h1>
+        <p>Create & Update QR Codes instantly</p>
+
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('create')">Create New</button>
+            <button class="tab-btn" onclick="switchTab('manage')">Manage Existing</button>
+        </div>
+
+        <!-- Create Panel -->
+        <div id="create-panel" class="panel active">
+            <div class="input-group">
+                <label for="target-url">Destination URL</label>
+                <input type="url" id="target-url" placeholder="https://example.com" required>
+            </div>
+            <button onclick="generateQR()">Generate QR Code</button>
+
+            <div id="qr-result" class="qr-result">
+                <div class="qr-image">
+                    <img id="qr-img" src="" alt="QR Code">
+                </div>
+                <div class="qr-info">
+                    <div><strong>QR ID:</strong> <span id="qr-id"></span></div>
+                    <div><strong>Redirects to:</strong> <span id="qr-target"></span></div>
+                    <div style="font-size: 0.8rem; color: #666; margin-top: 5px;">Save this ID to update the link later!</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Manage Panel -->
+        <div id="manage-panel" class="panel">
+            <div class="input-group">
+                <label for="update-id">QR Link ID</label>
+                <input type="text" id="update-id" placeholder="e.g. a1b2c3">
+            </div>
+            <div class="input-group">
+                <label for="new-url">New Destination URL</label>
+                <input type="url" id="new-url" placeholder="https://new-site.com">
+            </div>
+            <button onclick="updateQR()">Update Link</button>
+        </div>
+    </div>
+
+    <div id="toast" class="toast">Action Successful!</div>
+
+    <script>
+        const API_BASE = window.location.origin;
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.panel').forEach(panel => panel.classList.remove('active'));
+
+            if (tab === 'create') {
+                document.querySelector('.tab-btn:first-child').classList.add('active');
+                document.getElementById('create-panel').classList.add('active');
+            } else {
+                document.querySelector('.tab-btn:last-child').classList.add('active');
+                document.getElementById('manage-panel').classList.add('active');
+            }
+        }
+
+        async function generateQR() {
+            const urlInput = document.getElementById('target-url');
+            const url = urlInput.value.trim();
+
+            if (!url) {
+                showToast("Please enter a URL first.");
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/api/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url })
+                });
+                
+                const data = await res.json();
+                
+                if (data.qrCodeImage) {
+                    document.getElementById('qr-img').src = data.qrCodeImage;
+                    document.getElementById('qr-id').innerText = data.id;
+                    document.getElementById('qr-target').innerText = data.targetUrl;
+                    document.getElementById('qr-result').classList.add('active');
+                    showToast("QR Code Created!");
+                } else {
+                    showToast("Error creating QR Code.");
+                }
+            } catch (e) {
+                console.error(e);
+                showToast("Server error occurred.");
+            }
+        }
+
+        async function updateQR() {
+            const id = document.getElementById('update-id').value.trim();
+            const newUrl = document.getElementById('new-url').value.trim();
+
+            if (!id || !newUrl) {
+                showToast("Please fill in both fields.");
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/api/update`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id, newUrl })
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    showToast("Link Updated Successfully!");
+                } else {
+                    showToast(data.error || "Failed to update.");
+                }
+            } catch (e) {
+                console.error(e);
+                showToast("Server error occurred.");
+            }
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.innerText = msg;
+            toast.classList.add('show');
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
