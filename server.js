@@ -59,11 +59,30 @@ app.post('/api/generate', async (req, res) => {
         await newLink.save();
 
         // The URL that will be encoded in the QR code
-        const redirectUrl = `${req.protocol}://${req.get('host')}/r/${id}`;
+        // We use the 'user@domain' trick. 
+        // Scanners often show the 'user' part or the whole string. 
+        // Example: https://Menu@my-app.com/r/123
+        const host = req.get('host');
+        const protocol = req.protocol;
+        
+        let redirectUrl = `${protocol}://${host}/r/${id}`;
+        
+        if (title) {
+            // Sanitize title: remove spaces and special chars to make it URL-safe
+            const sanitizedTitle = title.replace(/[^a-zA-Z0-9]/g, '');
+            if (sanitizedTitle) {
+                redirectUrl = `${protocol}://${sanitizedTitle}@${host}/r/${id}`;
+            }
+        } else {
+             // Default override as requested by user
+             redirectUrl = `${protocol}://Navonmesh2026@${host}/r/${id}`;
+        }
+        
         const qrCodeImage = await QRCode.toDataURL(redirectUrl);
         
         res.json({
             id,
+            type: 'dynamic',
             redirectUrl,
             qrCodeImage,
             targetUrl: url
