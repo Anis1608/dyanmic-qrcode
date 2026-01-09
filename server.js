@@ -37,7 +37,7 @@ const generateId = () => {
 
 // 1. Create a new Dynamic QR Code Link
 app.post('/api/generate', async (req, res) => {
-    const { url } = req.body;
+    const { url, type, title } = req.body;
     if (!url) {
         return res.status(400).json({ error: 'URL is required' });
     }
