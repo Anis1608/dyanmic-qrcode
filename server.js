@@ -155,6 +155,28 @@ app.get('/api/info/:id', async (req, res) => {
     }
 });
 
+// 5. Health Check / Ping Endpoint
+app.get('/ping', (req, res) => {
+    res.status(200).send('Pong');
+});
+
 app.listen(PORT, () => {
     console.log(`Server running at http://localhost:${PORT}`);
+
+    // Self-ping to keep the server awake
+    const keepAlive = () => {
+        const url = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+        const protocol = url.startsWith('https') ? require('https') : require('http');
+        
+        protocol.get(`${url}/ping`, (resp) => {
+            console.log(`Keep-alive ping status: ${resp.statusCode}`);
+        }).on('error', (err) => {
+            console.error('Keep-alive ping failed:', err.message);
+        });
+    };
+
+    // Ping every 5 minutes (300000 ms)
+    setInterval(keepAlive, 300000); 
+    // Initial ping
+    setTimeout(keepAlive, 10000); 
 });
